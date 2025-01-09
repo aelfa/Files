@@ -1,5 +1,5 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
@@ -10,7 +10,7 @@ using IO = System.IO;
 
 namespace Files.App.Utils.Storage
 {
-	public class ShortcutStorageFile : ShellStorageFile, IShortcutStorageItem
+	public sealed class ShortcutStorageFile : ShellStorageFile, IShortcutStorageItem
 	{
 		public string TargetPath { get; }
 		public string Arguments { get; }
@@ -26,7 +26,7 @@ namespace Files.App.Utils.Storage
 		}
 	}
 
-	public class BinStorageFile : ShellStorageFile, IBinStorageItem
+	public sealed class BinStorageFile : ShellStorageFile, IBinStorageItem
 	{
 		public string OriginalPath { get; }
 		public DateTimeOffset DateDeleted { get; }
@@ -174,7 +174,7 @@ namespace Files.App.Utils.Storage
 			return Task.FromResult(new BaseBasicProperties());
 		}
 
-		private class ShellFileBasicProperties : BaseBasicProperties
+		private sealed class ShellFileBasicProperties : BaseBasicProperties
 		{
 			private readonly ShellFileItem file;
 
@@ -182,7 +182,7 @@ namespace Files.App.Utils.Storage
 
 			public override ulong Size => file.FileSizeBytes;
 
-			public override DateTimeOffset ItemDate => file.ModifiedDate;
+			public override DateTimeOffset DateCreated => file.CreatedDate;
 			public override DateTimeOffset DateModified => file.ModifiedDate;
 		}
 	}

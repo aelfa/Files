@@ -1,7 +1,7 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
-using Files.App.Storage.FtpStorage;
+using Files.App.Storage.Storables;
 using FluentFTP;
 using System.IO;
 using System.Net;
@@ -72,7 +72,7 @@ namespace Files.App.Utils.Storage
 				: Task.FromResult<BaseStorageFile>(null).AsAsyncOperation();
 
 		public override IAsyncOperation<StorageFile> ToStorageFileAsync()
-			=> StorageFile.CreateStreamedFileAsync(Name, FtpDataStreamingHandler, null);
+			=> StorageFile.CreateStreamedFileAsync(Name, FtpDataStreamingHandlerAsync, null);
 
 		public override bool IsEqual(IStorageItem item) => item?.Path == Path;
 		public override bool IsOfType(StorageItemTypes type) => type is StorageItemTypes.File;
@@ -116,7 +116,7 @@ namespace Files.App.Utils.Storage
 				{
 					DisposeCallback = ftpClient.Dispose
 				};
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 		public override IAsyncOperation<IRandomAccessStream> OpenAsync(FileAccessMode accessMode, StorageOpenOptions options) => OpenAsync(accessMode);
 
@@ -133,7 +133,7 @@ namespace Files.App.Utils.Storage
 				var inStream = await ftpClient.OpenRead(FtpPath, token: cancellationToken);
 				var nsStream = new NonSeekableRandomAccessStreamForRead(inStream, (ulong)inStream.Length) { DisposeCallback = ftpClient.Dispose };
 				return new StreamWithContentType(nsStream);
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 		public override IAsyncOperation<IInputStream> OpenSequentialReadAsync()
 		{
@@ -147,7 +147,7 @@ namespace Files.App.Utils.Storage
 
 				var inStream = await ftpClient.OpenRead(FtpPath, token: cancellationToken);
 				return new InputStreamWithDisposeCallback(inStream) { DisposeCallback = () => ftpClient.Dispose() };
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 
 		public override IAsyncOperation<StorageStreamTransaction> OpenTransactedWriteAsync() => throw new NotSupportedException();
@@ -180,7 +180,7 @@ namespace Files.App.Utils.Storage
 					using var stream = await file.OpenStreamForWriteAsync();
 					return await ftpClient.DownloadStream(stream, FtpPath, token: cancellationToken) ? file : null;
 				}
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 
 		public override IAsyncAction MoveAsync(IStorageFolder destinationFolder)
@@ -189,7 +189,7 @@ namespace Files.App.Utils.Storage
 			=> MoveAsync(destinationFolder, desiredNewName, NameCollisionOption.FailIfExists);
 		public override IAsyncAction MoveAsync(IStorageFolder destinationFolder, string desiredNewName, NameCollisionOption option)
 		{
-			return AsyncInfo.Run((cancellationToken) => SafetyExtensions.Wrap(async () =>
+			return AsyncInfo.Run((cancellationToken) => SafetyExtensions.WrapAsync(async () =>
 			{
 				using var ftpClient = GetFtpClient();
 				if (!await ftpClient.EnsureConnectedAsync())
@@ -208,7 +208,7 @@ namespace Files.App.Utils.Storage
 				}
 				else
 					throw new NotSupportedException();
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 
 
@@ -219,7 +219,7 @@ namespace Files.App.Utils.Storage
 			=> RenameAsync(desiredName, NameCollisionOption.FailIfExists);
 		public override IAsyncAction RenameAsync(string desiredName, NameCollisionOption option)
 		{
-			return AsyncInfo.Run((cancellationToken) => SafetyExtensions.Wrap(async () =>
+			return AsyncInfo.Run((cancellationToken) => SafetyExtensions.WrapAsync(async () =>
 			{
 				using var ftpClient = GetFtpClient();
 				if (!await ftpClient.EnsureConnectedAsync())
@@ -234,19 +234,19 @@ namespace Files.App.Utils.Storage
 				{
 					// TODO: handle name generation
 				}
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 
 		public override IAsyncAction DeleteAsync()
 		{
-			return AsyncInfo.Run((cancellationToken) => SafetyExtensions.Wrap(async () =>
+			return AsyncInfo.Run((cancellationToken) => SafetyExtensions.WrapAsync(async () =>
 			{
 				using var ftpClient = GetFtpClient();
 				if (await ftpClient.EnsureConnectedAsync())
 				{
 					await ftpClient.DeleteFile(FtpPath, cancellationToken);
 				}
-			}, ((IPasswordProtectedItem)this).RetryWithCredentials));
+			}, ((IPasswordProtectedItem)this).RetryWithCredentialsAsync));
 		}
 		public override IAsyncAction DeleteAsync(StorageDeleteOption option) => DeleteAsync();
 
@@ -268,7 +268,7 @@ namespace Files.App.Utils.Storage
 			return new(host, credentials, port);
 		}
 
-		private async void FtpDataStreamingHandler(StreamedFileDataRequest request)
+		private async void FtpDataStreamingHandlerAsync(StreamedFileDataRequest request)
 		{
 			try
 			{
@@ -292,24 +292,24 @@ namespace Files.App.Utils.Storage
 			}
 		}
 
-		private class FtpFileBasicProperties : BaseBasicProperties
+		private sealed class FtpFileBasicProperties : BaseBasicProperties
 		{
 			public override ulong Size { get; }
 
-			public override DateTimeOffset ItemDate { get; }
+			public override DateTimeOffset DateCreated { get; }
 			public override DateTimeOffset DateModified { get; }
 
 			public FtpFileBasicProperties(FtpItem item)
 			{
 				Size = (ulong)item.FileSizeBytes;
-				ItemDate = item.ItemDateCreatedReal;
+				DateCreated = item.ItemDateCreatedReal;
 				DateModified = item.ItemDateModifiedReal;
 			}
 
 			public FtpFileBasicProperties(FtpListItem item)
 			{
 				Size = (ulong)item.Size;
-				ItemDate = item.RawCreated < DateTime.FromFileTimeUtc(0) ? DateTimeOffset.MinValue : item.RawCreated;
+				DateCreated = item.RawCreated < DateTime.FromFileTimeUtc(0) ? DateTimeOffset.MinValue : item.RawCreated;
 				DateModified = item.RawModified < DateTime.FromFileTimeUtc(0) ? DateTimeOffset.MinValue : item.RawModified;
 			}
 		}

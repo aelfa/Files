@@ -1,5 +1,5 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 using Files.App.UserControls.TabBar;
 using Files.App.ViewModels;
@@ -40,11 +40,20 @@ namespace Files.App.Helpers
 				tabs.Where((t) => t != clickedTab).ToList().ForEach(tab => multitaskingControl.CloseTab(tab));
 			}
 		}
+		
+		public static void CloseAllTabs(ITabBar multitaskingControl)
+		{
+			if (multitaskingControl is not null)
+			{
+				var tabs = MainPageViewModel.AppInstances;
+				tabs.ToList().ForEach(tab => multitaskingControl.CloseTab(tab));
+			}
+		}
 
 		public static Task MoveTabToNewWindow(TabBarItem tab, ITabBar multitaskingControl)
 		{
 			int index = MainPageViewModel.AppInstances.IndexOf(tab);
-			CustomTabViewItemParameter tabItemArguments = MainPageViewModel.AppInstances[index].NavigationParameter;
+			TabBarItemParameter tabItemArguments = MainPageViewModel.AppInstances[index].NavigationParameter;
 
 			multitaskingControl?.CloseTab(MainPageViewModel.AppInstances[index]);
 

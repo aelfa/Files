@@ -1,5 +1,5 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 using Files.Shared.Helpers;
 using Microsoft.Extensions.Logging;
@@ -282,7 +282,6 @@ namespace Files.App.Utils.Storage
 						Opacity = 1,
 						FileImage = null,
 						LoadFileIcon = itemThumbnailImgVis,
-						LoadWebShortcutGlyph = isUrl,
 						ItemNameRaw = itemName,
 						ItemDateModifiedReal = itemModifiedDate,
 						ItemDateCreatedReal = itemCreatedDate,
