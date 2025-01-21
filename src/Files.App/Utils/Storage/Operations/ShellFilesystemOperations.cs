@@ -1,5 +1,5 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 using System.IO;
 using Windows.Storage;
@@ -9,8 +9,10 @@ namespace Files.App.Utils.Storage
 	/// <summary>
 	/// Provides group of shell file system operation for given page instance.
 	/// </summary>
-	public class ShellFilesystemOperations : IFilesystemOperations
+	public sealed class ShellFilesystemOperations : IFilesystemOperations
 	{
+		private readonly IStorageTrashBinService StorageTrashBinService = Ioc.Default.GetRequiredService<IStorageTrashBinService>();
+
 		private IShellPage _associatedInstance;
 
 		private FilesystemOperations _filesystemOperations;
@@ -38,13 +40,19 @@ namespace Files.App.Utils.Storage
 
 		public async Task<IStorageHistory> CopyItemsAsync(IList<IStorageItemWithPath> source, IList<string> destination, IList<FileNameConflictResolveOptionType> collisions, IProgress<StatusCenterItemProgressModel> progress, CancellationToken cancellationToken, bool asAdmin = false)
 		{
-			if (source.Any(x => string.IsNullOrWhiteSpace(x.Path) || x.Path.StartsWith(@"\\?\", StringComparison.Ordinal)) || destination.Any(x => string.IsNullOrWhiteSpace(x) || x.StartsWith(@"\\?\", StringComparison.Ordinal) || FtpHelpers.IsFtpPath(x) || ZipStorageFolder.IsZipPath(x, false)))
+			if (source.Any(x => string.IsNullOrWhiteSpace(x.Path) || x.Path.StartsWith(@"\\?\", StringComparison.Ordinal) || FtpHelpers.IsFtpPath(x.Path) || ZipStorageFolder.IsZipPath(x.Path, false))
+				|| destination.Any(x => string.IsNullOrWhiteSpace(x) || x.StartsWith(@"\\?\", StringComparison.Ordinal) || FtpHelpers.IsFtpPath(x) || ZipStorageFolder.IsZipPath(x, false)))
 			{
 				// Fallback to built-in file operations
 				return await _filesystemOperations.CopyItemsAsync(source, destination, collisions, progress, cancellationToken);
 			}
 
-			StatusCenterItemProgressModel fsProgress = new(progress, true, FileSystemStatusCode.InProgress);
+			StatusCenterItemProgressModel fsProgress = new(
+				progress,
+				true,
+				FileSystemStatusCode.InProgress,
+				source.Count);
+
 			fsProgress.Report();
 
 			var sourceNoSkip = source.Zip(collisions, (src, coll) => new { src, coll }).Where(item => item.coll != FileNameConflictResolveOptionType.Skip).Select(item => item.src);
@@ -297,7 +305,7 @@ namespace Files.App.Utils.Storage
 			StatusCenterItemProgressModel fsProgress = new(progress, true, FileSystemStatusCode.InProgress, source.Count);
 			fsProgress.Report();
 
-			var items = source.Zip(destination, (src, dest, index) => new { src, dest, index }).Where(x => !string.IsNullOrEmpty(x.src.Path) && !string.IsNullOrEmpty(x.dest));
+			var items = source.Zip(destination, (src, dest) => new { src, dest }).Where(x => !string.IsNullOrEmpty(x.src.Path) && !string.IsNullOrEmpty(x.dest));
 			foreach (var item in items)
 			{
 				var result = await FileOperationsHelpers.CreateOrUpdateLinkAsync(item.dest, item.src.Path);
@@ -311,7 +319,7 @@ namespace Files.App.Utils.Storage
 					createdDestination.Add(StorageHelpers.FromPathAndType(item.dest, FilesystemItemType.File));
 				}
 
-				fsProgress.ProcessedItemsCount = item.index;
+				fsProgress.AddProcessedItemsCount(1);
 				fsProgress.Report();
 			}
 
@@ -343,11 +351,16 @@ namespace Files.App.Utils.Storage
 				return await _filesystemOperations.DeleteItemsAsync(source, progress, permanently, cancellationToken);
 			}
 
-			StatusCenterItemProgressModel fsProgress = new(progress, true, FileSystemStatusCode.InProgress);
+			StatusCenterItemProgressModel fsProgress = new(
+				progress,
+				true,
+				FileSystemStatusCode.InProgress,
+				source.Count);
+
 			fsProgress.Report();
 
 			var deleteFilePaths = source.Select(s => s.Path).Distinct();
-			var deleteFromRecycleBin = source.Any() && RecycleBinHelpers.IsPathUnderRecycleBin(source.ElementAt(0).Path);
+			var deleteFromRecycleBin = source.Any() && StorageTrashBinService.IsUnderTrashBin(source.ElementAt(0).Path);
 
 			permanently |= deleteFromRecycleBin;
 
@@ -374,7 +387,7 @@ namespace Files.App.Utils.Storage
 
 				foreach (var item in deleteResult.Items)
 				{
-					await _associatedInstance.FilesystemViewModel.RemoveFileOrFolderAsync(item.Source);
+					await _associatedInstance.ShellViewModel.RemoveFileOrFolderAsync(item.Source);
 				}
 
 				var recycledSources = deleteResult.Items.Where(x => x.Succeeded && x.Destination is not null && x.Source != x.Destination);
@@ -457,7 +470,12 @@ namespace Files.App.Utils.Storage
 				return await _filesystemOperations.MoveItemsAsync(source, destination, collisions, progress, cancellationToken);
 			}
 
-			StatusCenterItemProgressModel fsProgress = new(progress, true, FileSystemStatusCode.InProgress);
+			StatusCenterItemProgressModel fsProgress = new(
+				progress,
+				true,
+				FileSystemStatusCode.InProgress,
+				source.Count);
+
 			fsProgress.Report();
 
 			var sourceNoSkip = source.Zip(collisions, (src, coll) => new { src, coll }).Where(item => item.coll != FileNameConflictResolveOptionType.Skip).Select(item => item.src);
@@ -642,7 +660,17 @@ namespace Files.App.Utils.Storage
 				if (renameResult.Items.Any(x => CopyEngineResult.Convert(x.HResult) == FileSystemStatusCode.Unauthorized))
 				{
 					if (!asAdmin && await RequestAdminOperation())
-						return await RenameAsync(source, newName, collision, progress, cancellationToken, true);
+					{
+						var res = await RenameAsync(source, newName, collision, progress, cancellationToken, true);
+						if (res is null)
+						{
+							await DynamicDialogFactory
+								.GetFor_RenameRequiresHigherPermissions(source.Path)
+								.TryShowAsync();
+						}
+
+						return res;
+					}
 				}
 				else if (renameResult.Items.Any(x => CopyEngineResult.Convert(x.HResult) == FileSystemStatusCode.InUse))
 				{
@@ -711,7 +739,7 @@ namespace Files.App.Utils.Storage
 			using var r = cancellationToken.Register(CancelOperation, operationID, false);
 
 			var moveResult = new ShellOperationResult();
-			var (status, response) = await FileOperationsHelpers.MoveItemAsync(source.Select(s => s.Path).ToArray(), destination.ToArray(), false, MainWindow.Instance.WindowHandle.ToInt64(), asAdmin, progress, operationID);
+			var (status, response) = await FileOperationsHelpers.MoveItemAsync(source.Select(s => s.Path).ToArray(), [.. destination], false, MainWindow.Instance.WindowHandle.ToInt64(), asAdmin, progress, operationID);
 
 			var result = (FilesystemResult)status;
 			moveResult.Items.AddRange(response?.Final ?? Enumerable.Empty<ShellOperationItemResult>());
@@ -819,9 +847,9 @@ namespace Files.App.Utils.Storage
 			List<ShellFileItem> binItems = null;
 			foreach (var src in source)
 			{
-				if (RecycleBinHelpers.IsPathUnderRecycleBin(src))
+				if (StorageTrashBinService.IsUnderTrashBin(src))
 				{
-					binItems ??= await RecycleBinHelpers.EnumerateRecycleBin();
+					binItems ??= await StorageTrashBinService.GetAllRecycleBinFoldersAsync();
 
 					// Might still be null because we're deserializing the list from Json
 					if (!binItems.IsEmpty())

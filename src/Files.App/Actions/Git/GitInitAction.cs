@@ -1,5 +1,5 @@
-﻿// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+﻿// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 namespace Files.App.Actions
 {
@@ -25,9 +25,9 @@ namespace Files.App.Actions
 			_context.PropertyChanged += Context_PropertyChanged;
 		}
 
-		public Task ExecuteAsync()
+		public Task ExecuteAsync(object? parameter = null)
 		{
-			return GitHelpers.InitializeRepository(_context.Folder?.ItemPath);
+			return GitHelpers.InitializeRepositoryAsync(_context.Folder?.ItemPath);
 		}
 
 		private void Context_PropertyChanged(object? sender, PropertyChangedEventArgs e)

@@ -1,5 +1,5 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 namespace Files.App.UserControls.TabBar
 {
@@ -16,7 +16,7 @@ namespace Files.App.UserControls.TabBar
 
 		public List<ITabBarItemContent> GetAllTabInstances();
 
-		public Task ReopenClosedTab();
+		public Task ReopenClosedTabAsync();
 
 		public void CloseTab(TabBarItem tabItem);
 

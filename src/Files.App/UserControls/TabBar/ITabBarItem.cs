@@ -1,5 +1,5 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 using Microsoft.UI.Xaml.Controls;
 
@@ -18,6 +18,6 @@ namespace Files.App.UserControls.TabBar
 
 		bool AllowStorageItemDrop { get; }
 
-		public CustomTabViewItemParameter NavigationParameter { get; }
+		public TabBarItemParameter NavigationParameter { get; }
 	}
 }
