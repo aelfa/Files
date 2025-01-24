@@ -1,15 +1,18 @@
-// Copyright (c) 2023 Files Community
-// Licensed under the MIT License. See the LICENSE.
+// Copyright (c) Files Community
+// Licensed under the MIT License.
 
 using CommunityToolkit.WinUI.UI;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace Files.App.Dialogs
 {
 	public sealed partial class FilesystemOperationDialog : ContentDialog, IDialog<FileSystemDialogViewModel>
 	{
+		private FrameworkElement RootAppElement
+			=> (FrameworkElement)MainWindow.Instance.Content;
+
 		public FileSystemDialogViewModel ViewModel
 		{
 			get => (FileSystemDialogViewModel)DataContext;
@@ -52,8 +55,18 @@ namespace Files.App.Dialogs
 
 		private void UpdateDialogLayout()
 		{
-			if (ViewModel.FileSystemDialogMode.ConflictsExist)
-				ContainerGrid.Width = MainWindow.Instance.Bounds.Width <= 700 ? MainWindow.Instance.Bounds.Width - 50 : 650;
+			try
+			{
+				if (ViewModel.FileSystemDialogMode.ConflictsExist)
+					ContainerGrid.Width = MainWindow.Instance.Bounds.Width <= 700 ? MainWindow.Instance.Bounds.Width - 50 : 650;
+			}
+			catch (Exception ex)
+			{
+				// Handle exception in case WinUI Windows is closed
+				// (see https://github.com/files-community/Files/issues/15599)
+
+				App.Logger.LogWarning(ex, ex.Message);
+			}
 		}
 
 		protected override void OnApplyTemplate()
@@ -106,24 +119,8 @@ namespace Files.App.Dialogs
 			(sender as TextBox)?.Focus(FocusState.Programmatic);
 		}
 
-		private void ConflictOptions_Loaded(object sender, RoutedEventArgs e)
-		{
-			if (sender is ComboBox comboBox)
-				comboBox.SelectedIndex = ViewModel.LoadConflictResolveOption() switch
-				{
-					FileNameConflictResolveOptionType.None => -1,
-					FileNameConflictResolveOptionType.GenerateNewName => 0,
-					FileNameConflictResolveOptionType.ReplaceExisting => 1,
-					FileNameConflictResolveOptionType.Skip => 2,
-					_ => -1
-				};
-		}
-
 		private void FilesystemOperationDialog_Opened(ContentDialog sender, ContentDialogOpenedEventArgs args)
 		{
-			if (ViewModel.FileSystemDialogMode.IsInDeleteMode)
-				DescriptionText.Foreground = App.Current.Resources["TextControlForeground"] as SolidColorBrush;
-
 			UpdateDialogLayout();
 		}
 
