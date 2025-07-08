@@ -41,7 +41,7 @@ namespace Files.App.Views
 			SidebarAdaptiveViewModel.PaneFlyout = (MenuFlyout)Resources["SidebarContextMenu"];
 			ViewModel = Ioc.Default.GetRequiredService<MainPageViewModel>();
 
-			if (FilePropertiesHelpers.FlowDirectionSettingIsRightToLeft)
+			if (AppLanguageHelper.IsPreferredLanguageRtl)
 				FlowDirection = FlowDirection.RightToLeft;
 
 			ViewModel.PropertyChanged += ViewModel_PropertyChanged;
